@@ -32,11 +32,48 @@ URI: 287223951947.dkr.ecr.ap-southeast-2.amazonaws.com/rag-guided-chatbot
 ## Then search find and create EC2 instance (To load and run the docker image)
 
 Launch instance -> provide name -> Ubuntu_OS -> Instance type: 8 GB memory
--> Key pair name -> Configure storage 20GB -> Launch instance 
+-> Key pair name -> Configure storage 20GB -> Launch instance
+
+Connect EC2 using a public IP
+
+
+## Open EC2 and Install docker in EC2 Machine:
+
+#optinal
+
+sudo apt-get update -y
+
+sudo apt-get upgrade
+
+#required
+
+curl -fsSL https://get.docker.com -o get-docker.sh
+
+sudo sh get-docker.sh
+
+sudo usermod -aG docker ubuntu
+
+newgrp docker
 
 
 
-#Description: About the deployment
+## Github Action
+Github Project Repo -> Settings -> Actions -> Runner -> New Self Hosted Runner -> Linux
+
+Then Run the given commands to connect Github with EC2 instance
+
+## Save Keys in Github Secrets
+Secrets and variables -> actions -> New repository secrets -> Add Keys
+
+1. AWS_ACCESS_KEY_ID
+2. AWS_SECRET_ACCESS_KEY
+3. AWS_DEFAULT_REGION
+4. ECR_REPO
+5. PINECONE_API_KEY
+6. OPENAI_API_KEY
+
+
+#Summary: About the deployment
 
 1. Build docker image of the source code
 
@@ -47,4 +84,3 @@ Launch instance -> provide name -> Ubuntu_OS -> Instance type: 8 GB memory
 4. Pull Your image from ECR in EC2
 
 5. Lauch your docker image in EC2
-
