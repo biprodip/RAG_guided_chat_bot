@@ -1,3 +1,31 @@
+"""
+store_index.py
+--------------
+One-time (or on-demand) script to build the Pinecone vector store index.
+
+Pipeline
+~~~~~~~~
+1. Load all ``*.pdf`` files from the ``data/`` directory.
+2. Strip unnecessary metadata, keeping only the ``source`` path.
+3. Split the text into 500-character chunks (20-character overlap).
+4. Initialise the HuggingFace sentence-transformer embedding model.
+5. Create the Pinecone serverless index (``rag-guided-chatbot``) if it does
+   not already exist — dimension 384, cosine similarity, AWS ``us-east-1``.
+6. Embed all chunks and upsert them into the index.
+
+Usage::
+
+    python store_index.py
+
+Required environment variables (``PINECONE_API_KEY``, ``OPENAI_API_KEY``)
+are loaded from a ``.env`` file in the project root.
+
+.. note::
+   Re-running this script will **add** vectors to an existing index rather
+   than replacing them.  To perform a clean re-index, delete the Pinecone
+   index from the console first.
+"""
+
 from dotenv import load_dotenv
 import os
 from src.helper import load_pdf_file, filter_to_minimal_docs, text_split, download_hugging_face_embeddings

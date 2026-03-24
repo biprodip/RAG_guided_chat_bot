@@ -1,3 +1,33 @@
+"""
+app.py
+------
+Flask web application for the RAG-guided medical chatbot.
+
+Startup sequence
+~~~~~~~~~~~~~~~~
+1. Load ``PINECONE_API_KEY`` and ``OPENAI_API_KEY`` from the ``.env`` file.
+2. Initialise the HuggingFace sentence-transformer embedding model
+   (``all-MiniLM-L6-v2``, 384 dimensions).
+3. Connect to the pre-populated Pinecone vector store index
+   ``rag-guided-chatbot``.
+4. Build the LangChain RAG chain::
+
+       PineconeVectorStore (retriever, k=2)
+           └─► create_stuff_documents_chain  (ChatOpenAI gpt-4o-mini + system prompt)
+               └─► create_retrieval_chain
+
+Routes
+~~~~~~
+GET  /       Serve the chat web interface (``templates/chat.html``).
+POST /get    Accept a form field ``msg``, run the RAG chain, return the answer
+             as plain text.
+
+Run with::
+
+    python app.py           # development
+    gunicorn app:app        # production (recommended)
+"""
+
 from flask import Flask, render_template, jsonify, request
 from src.helper import download_hugging_face_embeddings
 from langchain_pinecone import PineconeVectorStore
@@ -50,12 +80,24 @@ rag_chain = create_retrieval_chain(retriever, question_answer_chain)
 
 @app.route("/")
 def index():
-    return render_template('chat.html')
+    """Render the chat web interface.
 
+    Returns:
+        Rendered ``chat.html`` template.
+    """
+    return render_template('chat.html')
 
 
 @app.route("/get", methods=["GET", "POST"])
 def chat():
+    """Process a user message and return the RAG-generated answer.
+
+    Reads the ``msg`` field from the submitted form, invokes the retrieval
+    chain, and returns the answer string as plain text.
+
+    Returns:
+        str: Concise answer (≤ 2 sentences) grounded in the retrieved context.
+    """
     msg = request.form["msg"]
     input = msg
     print(input)
