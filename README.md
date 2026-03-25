@@ -42,13 +42,13 @@ This RAG approach keeps responses grounded in the source material and reduces ha
                              │ AJAX
                              ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                      Flask Application                        │
+│                      Flask Application                       │
 │                          app.py                              │
 │                                                              │
-│  ┌──────────────────────┐    ┌───────────────────────────┐  │
-│  │  PineconeVectorStore  │    │    ChatOpenAI (gpt-4o-mini)│  │
-│  │  (Retriever, k=2)    │    │    + ChatPromptTemplate    │  │
-│  └──────────┬───────────┘    └────────────┬──────────────┘  │
+│  ┌──────────────────────┐    ┌───────────────────────────┐   │
+│  │  PineconeVectorStore │    │ ChatOpenAI (gpt-4o-mini)  │   │
+│  │  (Retriever, k=2)    │    │   + ChatPromptTemplate    │   │
+│  └──────────┬───────────┘    └────────────┬──────────────┘   │
 │             │  top-k docs                 │                  │
 │             └──────────────┬──────────────┘                  │
 │                            ▼                                 │
