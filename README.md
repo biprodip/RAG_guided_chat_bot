@@ -1,6 +1,6 @@
 # RAG Guided Medical Chatbot
 
-A production-ready **Retrieval-Augmented Generation (RAG)** chatbot specialised for medical question-answering. The system retrieves semantically relevant passages from domain-specific documents and synthesises concise, grounded answers using OpenAI's GPT-4o-mini.
+A  **Retrieval-Augmented Generation (RAG)** based chatbot specialised for medical question-answering. The system retrieves semantically relevant passages from domain-specific documents and synthesises concise, grounded answers using OpenAI's GPT-4o-mini. The updated version with hybrid retrival, reranking and other improvement will be published soon. 
 
 ---
 
