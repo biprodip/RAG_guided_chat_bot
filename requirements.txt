@@ -7,4 +7,3 @@ langchain-pinecone==0.2.8
 langchain-openai==0.3.24
 langchain-community==0.3.26
 flask-limiter==3.8.0
--e .
