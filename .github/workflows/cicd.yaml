@@ -121,5 +121,5 @@ jobs:
             "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
       - name: Remove secrets temp file
-        if: always()   # runs even if the previous step fails
+        if: always()   # runs regardless of the previous step fails
         run: rm -f /tmp/app.env
