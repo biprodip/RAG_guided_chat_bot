@@ -1,5 +1,22 @@
 name: Deploy Application Docker Image to EC2 instance
 
+# ---------------------------------------------------------------------------
+# Secrets required in GitHub → Settings → Secrets and variables → Actions
+#
+# AWS infra (CI runner needs these to push to ECR):
+#   AWS_ACCESS_KEY_ID       IAM key with ECR push + Secrets Manager read
+#   AWS_SECRET_ACCESS_KEY
+#   AWS_DEFAULT_REGION
+#   ECR_REPO                ECR repository name (without registry prefix)
+#
+# App secrets stored in AWS Secrets Manager (NOT passed as plain -e flags):
+#   prod/medical-chatbot/pinecone  → { "PINECONE_API_KEY": "..." }
+#   prod/medical-chatbot/openai   → { "OPENAI_API_KEY":   "..." }
+#
+# The EC2 self-hosted runner must have an IAM role (or the same IAM key)
+# with permission to call secretsmanager:GetSecretValue on those two ARNs.
+# ---------------------------------------------------------------------------
+
 on:
   push:
     branches: [main]
@@ -11,10 +28,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -22,28 +39,35 @@ jobs:
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build, tag, and push image to Amazon ECR
         id: build-image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPO }}
-          IMAGE_TAG: latest
+          # Tag by commit SHA for traceable rollbacks; also update :latest
+          IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .  
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker build \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" \
+            -t "$ECR_REGISTRY/$ECR_REPOSITORY:latest" \
+            .
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
 
   Continuous-Deployment:
     needs: Continuous-Integration
     runs-on: self-hosted
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -51,8 +75,51 @@ jobs:
 
       - name: Login to Amazon ECR
         id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v1
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Run Docker Image to serve users
+      # -------------------------------------------------------------------
+      # Fetch app secrets from AWS Secrets Manager and write to a temp file
+      # with strict permissions. This avoids secrets appearing in:
+      #   - `docker inspect` output  (plain -e flag problem)
+      #   - `docker ps` output
+      #   - the GitHub Actions log
+      # The temp file is deleted immediately after docker run starts.
+      # -------------------------------------------------------------------
+      - name: Fetch app secrets from AWS Secrets Manager
         run: |
-         docker run -d -e AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}" -e AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}" -e AWS_DEFAULT_REGION="${{ secrets.AWS_DEFAULT_REGION }}" -e PINECONE_API_KEY="${{ secrets.PINECONE_API_KEY }}" -e OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}" -p 8080:8080 "${{ steps.login-ecr.outputs.registry }}"/"${{ secrets.ECR_REPO }}":latest
+          PINECONE_API_KEY=$(aws secretsmanager get-secret-value \
+            --secret-id prod/medical-chatbot/pinecone \
+            --query SecretString --output text \
+            | python3 -c "import sys, json; print(json.load(sys.stdin)['PINECONE_API_KEY'])")
+
+          OPENAI_API_KEY=$(aws secretsmanager get-secret-value \
+            --secret-id prod/medical-chatbot/openai \
+            --query SecretString --output text \
+            | python3 -c "import sys, json; print(json.load(sys.stdin)['OPENAI_API_KEY'])")
+
+          # Write to a temp env file readable only by the current user
+          printf "PINECONE_API_KEY=%s\nOPENAI_API_KEY=%s\n" \
+            "$PINECONE_API_KEY" "$OPENAI_API_KEY" > /tmp/app.env
+          chmod 600 /tmp/app.env
+
+      - name: Stop and remove existing container (if running)
+        run: |
+          docker stop medical-chatbot 2>/dev/null || true
+          docker rm   medical-chatbot 2>/dev/null || true
+
+      - name: Run Docker container
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPO }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker run -d \
+            --name medical-chatbot \
+            --restart unless-stopped \
+            --env-file /tmp/app.env \
+            -p 8080:8080 \
+            "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      - name: Remove secrets temp file
+        if: always()   # runs even if the previous step fails
+        run: rm -f /tmp/app.env
